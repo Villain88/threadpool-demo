@@ -12,13 +12,12 @@
 #include <thread>
 #include <condition_variable>
 
-/*own headers*/
+/*Own headers*/
 #include "md5.h"
 #include "blockdata.hpp"
 
 using namespace std;
-mutex g_readfile_mutex;
-mutex g_writefile_mutex;
+
 size_t file_part = -1;
 ifstream in;
 ofstream out;
@@ -26,31 +25,34 @@ size_t block_size = 1024*1024;
 size_t blocks_count = 0;
 size_t last_section_size = block_size;
 const int digets_size = 16;
-const int digets_str_size = digets_size*2;
-
 
 class Signature
 {
 public:
     Signature(size_t thread_count = thread::hardware_concurrency())
     {
-        cout << thread_count << endl;
+        in_data_queue_.setMaxSize(thread_count*10);
+        out_data_queue_.setMaxSize(thread_count*10);
         isStart_ = true;
         threads_.reserve(thread_count);
         for(auto i = 0; i < thread_count; i++) {
-            threads_.push_back(thread([=] {calcBlockHash(i+1);}));
+            threads_.push_back(thread([=] {workerLoop(i+1);}));
         }
+        threads_.push_back(thread([=] {writeData();}));
     }
 
     void force_stop()
     {
-        data_queue_.erase();
+        in_data_queue_.erase();
+        out_data_queue_.erase();
+        join();
     }
 
     void join()
     {
         isStart_ = false;
         cv_data_available_.notify_all();
+        cv_write_available_.notify_all();
         for(auto &th: threads_) {
             if(th.joinable()) {
                 th.join();
@@ -58,9 +60,9 @@ public:
         }
     }
 
-    void appendData(block_data *data)
+    void appendData(unique_ptr<block_data> data)
     {
-        data_queue_.push(unique_ptr<block_data>(data));
+        in_data_queue_.push(move(data));
         cv_data_available_.notify_one();
     }
 
@@ -69,28 +71,61 @@ private:
     vector<thread> threads_;
     condition_variable cv_data_available_;
     mutex cv_data_available_mutex_;
-    DataQueue data_queue_;
-    void calcBlockHash(int thread_id)
+    condition_variable cv_write_available_;
+    mutex cv_write_available_mutex_;
+    DataQueue in_data_queue_;
+    DataQueue out_data_queue_;
+    void workerLoop(int thread_id)
     {
-        cout << "thread: " << thread_id << " start" << endl;
-        std::unique_lock<std::mutex> lock(cv_data_available_mutex_);
-        while(isStart_ || !data_queue_.empty()) {
-            cout << "thread: " << thread_id << " while" << endl;
-            if(!data_queue_.empty()) {
-                unique_ptr<block_data> data =data_queue_.take();
-                uint8_t result[digets_size];
-                md5(reinterpret_cast<uint8_t*>(data.get()->get_data()), data.get()->get_data_size(), result);
-                stringstream stringStream;
-                for (int i = 0; i < digets_size; i++)
-                    stringStream << setfill('0') << setw(2) << std::hex  << static_cast<unsigned int>(result[i]);
-                string md5sum = stringStream.str();
-                cout << "Block " << data->get_block_num() << " md5 " << md5sum << endl;
-                this_thread::sleep_for(std::chrono::milliseconds(100));
-            } else {
+        while(1) {
+            if(isStart_) {
+                std::unique_lock<std::mutex> lock(cv_data_available_mutex_);
                 cv_data_available_.wait(lock);
+            } else {
+                break;
+            }
+
+            while(unique_ptr<block_data> data = in_data_queue_.take()) {
+                calcHash(move(data));
             }
         }
-        cout << "thread: " << thread_id << " stop" << endl;
+    }
+
+    void calcHash(unique_ptr<block_data> data)
+    {
+        uint8_t result[digets_size];
+        md5(reinterpret_cast<uint8_t*>(data->get_data()), data->get_data_size(), result);
+        stringstream stringStream;
+        for (int i = 0; i < digets_size; i++)
+            stringStream << setfill('0') << setw(2) << std::hex  << static_cast<unsigned int>(result[i]);
+        string md5sum = stringStream.str();
+        //cout << "Block " << data->get_block_num() << " md5 " << md5sum <<endl;
+        unique_ptr<block_data> write_data(new block_data(md5sum.length(), data->get_block_num()));
+        memcpy(write_data->get_data(), md5sum.c_str(), write_data->get_data_size());
+        out_data_queue_.push(move(write_data));
+        cv_write_available_.notify_one();
+    }
+
+    void writeData()
+    {
+        ofstream out;
+        const char* outname = "/home/petr/tmp_file_md5";
+        out.open(outname, ios::out | ios::trunc);
+
+        while(1) {
+            if(isStart_) {
+                std::unique_lock<std::mutex> lock(cv_write_available_mutex_);
+                cv_write_available_.wait(lock);
+            } else {
+                break;
+            }
+
+            while(unique_ptr<block_data> data = out_data_queue_.take()) {
+                cout << "Block " << data->get_block_num() << " md5 ready for write " << data->get_data() <<endl;
+                out.seekp(data->get_block_num() * (data->get_data_size()), ios::beg);
+                out.write(data->get_data(), data->get_data_size());
+            }
+        }
     }
 };
 
@@ -102,20 +137,11 @@ bool readBlock(char* buffer, size_t block_num)
     } else {
         memset(buffer, 0, block_size);
         in.read(buffer, last_section_size);
-        cout << "Last section size " << last_section_size << endl;
     }
 
     if (!in)
-        cout << "error: only " << in.gcount() << " could be read";
+        throw std::runtime_error("Error reading file");
 
-    return true;
-}
-
-bool writeBlock(const char* str, size_t block_num)
-{
-    lock_guard<mutex> lock(g_writefile_mutex);
-    out.seekp(block_num * digets_str_size, ios::beg);
-    out.write(str, digets_str_size);
     return true;
 }
 
@@ -149,9 +175,9 @@ int main()
 
     Signature signature;
     for(size_t i = 0; i < blocks_count; i++) {
-        block_data *data = new block_data(block_size, i);
+        unique_ptr<block_data> data(new block_data(block_size, i));
         readBlock(data->get_data(), data->get_block_num());
-        signature.appendData(data);
+        signature.appendData(move(data));
     }
     signature.join();
     in.close();

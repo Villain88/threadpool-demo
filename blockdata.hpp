@@ -1,5 +1,6 @@
 #include <queue>
 #include <mutex>
+#include <condition_variable>
 #include <memory>
 
 using namespace std;
@@ -15,7 +16,7 @@ public:
     }
     ~block_data()
     {
-        cout << "block data destructor" << endl;
+        //cout << "block data destructor" << endl;
     }
     char *get_data()
     {
@@ -41,20 +42,16 @@ private:
 class DataQueue
 {
 public:
-    bool empty()
+    void setMaxSize(int max_size)
     {
-        lock_guard<std::mutex> lock(mutex);
-        return dataqueue_.empty();
+        max_size_ = max_size;
     }
-
-    int size()
-    {
-        lock_guard<std::mutex> lock(mutex);
-        return dataqueue_.size();
-    }
-
     void push(unique_ptr<block_data> data)
     {
+        while(dataqueue_.size() > max_size_) {
+            std::unique_lock<std::mutex> lock(cv_item_pop_mutex_);
+            cv_item_pop_.wait(lock);
+        }
         lock_guard<std::mutex> lock(mutex);
         dataqueue_.push(move(data));
     }
@@ -66,8 +63,9 @@ public:
         if(dataqueue_.size() > 0) {
             data = std::move(dataqueue_.front());
             dataqueue_.pop();
+            cv_item_pop_.notify_one();
         } else {
-            throw out_of_range("Queue is empty");
+            return unique_ptr<block_data>();
         }
         return data;
     }
@@ -75,10 +73,16 @@ public:
     void erase()
     {
         lock_guard<std::mutex> lock(mutex);
-        //dataqueue_
+        while (!dataqueue_.empty()) {
+             dataqueue_.pop();
+        }
+        cv_item_pop_.notify_one();
     }
 
 private:
     queue<unique_ptr<block_data>> dataqueue_;
     mutex mutex_;
+    condition_variable cv_item_pop_;
+    mutex cv_item_pop_mutex_;
+    int max_size_ = -1;
 };
