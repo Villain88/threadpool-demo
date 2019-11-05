@@ -8,16 +8,16 @@ using namespace std;
 class block_data
 {
 public:
-    block_data(size_t data_size, size_t block_num);
+    block_data(int64_t data_size, int64_t block_num);
     ~block_data();
     char *get_data();
-    size_t get_block_num();
-    size_t get_data_size();
+    int64_t get_block_num();
+    int64_t get_data_size();
 
 private:
     unique_ptr<char []> data_;
-    size_t data_size_;
-    size_t block_num_;
+    int64_t data_size_;
+    int64_t block_num_;
 };
 
 

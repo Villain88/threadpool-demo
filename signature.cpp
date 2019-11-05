@@ -6,8 +6,8 @@
 #include <fstream>
 #include <iostream>
 
-Signature::Signature(const string &out_filename, size_t blocks_count,
-                     size_t thread_count):out_filename_(out_filename), blocksCount_(blocks_count)
+Signature::Signature(const string &out_filename, int64_t blocks_count,
+                     int64_t thread_count):out_filename_(out_filename), blocksCount_(blocks_count)
 {
     in_data_queue_.setMaxSize(thread_count*10);
     out_data_queue_.setMaxSize(thread_count*10);
@@ -76,13 +76,15 @@ void Signature::calcHash(unique_ptr<block_data> data)
     string md5sum = stringStream.str();
     unique_ptr<block_data> write_data(new block_data(md5sum.length(), data->get_block_num()));
     memcpy(write_data->get_data(), md5sum.c_str(), write_data->get_data_size());
+    blocksReady_++;
+    cout << "hash " << write_data->get_block_num() + 1 << " ready " << blocksReady_ << "/" << blocksCount_ << endl;
     out_data_queue_.push(move(write_data));
     cv_write_available_.notify_one();
 }
 
 void Signature::writeData()
 {
-    size_t blocksReady = 0;
+    int64_t blocksReady = 0;
     ofstream out;
     out.open(out_filename_, ios::out | ios::trunc);
 
@@ -98,7 +100,7 @@ void Signature::writeData()
             out.seekp(data->get_block_num() * (data->get_data_size()), ios::beg);
             out.write(data->get_data(), data->get_data_size());
             blocksReady++;
-            printf("Block %ld complite (%ld/%ld blocks ready)\n", data->get_block_num() + 1,
+            printf("Block %ld complete (%ld/%ld blocks ready)\n", data->get_block_num() + 1,
                    blocksReady, blocksCount_);
         }
     }

@@ -1,6 +1,6 @@
 #include "blockdata.h"
 
-block_data::block_data(size_t data_size, size_t block_num)
+block_data::block_data(int64_t data_size, int64_t block_num)
 {
     data_size_ = data_size;
     block_num_ = block_num;
@@ -17,12 +17,12 @@ char *block_data::get_data()
     return data_.get();
 }
 
-size_t block_data::get_block_num()
+int64_t block_data::get_block_num()
 {
     return block_num_;
 }
 
-size_t block_data::get_data_size()
+int64_t block_data::get_data_size()
 {
     return data_size_;
 }
@@ -45,7 +45,7 @@ void DataQueue::push(unique_ptr<block_data> data)
             cv_item_pop_.wait(lock);
         }
     }
-    lock_guard<std::mutex> lock(mutex);
+    unique_lock<std::mutex> lock(mutex);
     dataqueue_.push(move(data));
 }
 
@@ -58,7 +58,7 @@ unique_ptr<block_data> DataQueue::take()
         dataqueue_.pop();
         cv_item_pop_.notify_one();
     } else {
-        return unique_ptr<block_data>();
+        return unique_ptr<block_data>(nullptr);
     }
     return data;
 }

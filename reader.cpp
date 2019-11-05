@@ -4,7 +4,7 @@
 #include <cstring>
 #include <sys/stat.h>
 
-Reader::Reader(const string &filename, size_t block_size):filename_(filename), block_size_(block_size)
+Reader::Reader(const string &filename, int64_t block_size):filename_(filename), block_size_(block_size)
 {
 
 }
@@ -25,10 +25,10 @@ int Reader::startReader(const string &outname)
 
     last_section_size_ = block_size_;
 
-    size_t filesize = (size_t)st.st_size;
+    int64_t filesize = st.st_size;
     cout << "Filesize: " << filesize << endl;
     blocks_count_ = filesize/block_size_;
-    size_t remaining_part = filesize % block_size_;
+    int64_t remaining_part = filesize % block_size_;
     if(remaining_part) {
         blocks_count_++;
         last_section_size_ = remaining_part;
@@ -36,7 +36,7 @@ int Reader::startReader(const string &outname)
     cout << "Blocks count: " << blocks_count_ << endl;
 
     Signature signature(outname, blocks_count_);
-    for(size_t i = 0; i < blocks_count_; i++) {
+    for(int64_t i = 0; i < blocks_count_; i++) {
         unique_ptr<block_data> data(new block_data(block_size_, i));
         readBlock(data->get_data(), data->get_block_num());
         signature.appendData(move(data));
@@ -45,7 +45,7 @@ int Reader::startReader(const string &outname)
     in.close();
 }
 
-bool Reader::readBlock(char *buffer, size_t block_num)
+bool Reader::readBlock(char *buffer, int64_t block_num)
 {
     in.seekg(block_num*block_size_, ios::beg);
     //check for last section

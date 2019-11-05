@@ -8,7 +8,7 @@ using namespace std;
 class Signature
 {
 public:
-    Signature(const string &out_filename, size_t blocks_count, size_t thread_count = thread::hardware_concurrency());
+    Signature(const string &out_filename, int64_t blocks_count, int64_t thread_count = thread::hardware_concurrency());
     void force_stop();
     void join();
     void appendData(unique_ptr<block_data> data);
@@ -29,6 +29,7 @@ private:
     void calcHash(unique_ptr<block_data> data);
     void writeData();
     const string out_filename_;
-    const size_t blocksCount_;
+    const int64_t blocksCount_;
+    atomic<int64_t> blocksReady_ = {};
 };
 
