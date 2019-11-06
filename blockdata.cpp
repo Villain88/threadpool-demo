@@ -52,13 +52,11 @@ void DataQueue::push(unique_ptr<block_data> data)
 unique_ptr<block_data> DataQueue::take()
 {
     lock_guard<std::mutex> lock(mutex);
-    unique_ptr<block_data> data;
+    unique_ptr<block_data> data(nullptr);
     if(dataqueue_.size() > 0) {
         data = std::move(dataqueue_.front());
         dataqueue_.pop();
         cv_item_pop_.notify_one();
-    } else {
-        return unique_ptr<block_data>(nullptr);
     }
     return data;
 }
