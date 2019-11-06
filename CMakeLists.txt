@@ -8,4 +8,4 @@ set(SOURCES "signature.cpp"
             "main.cpp"
             "reader.cpp")
 add_executable(${PROJECT_NAME} ${SOURCES})
-target_link_libraries(${PROJECT_NAME} -lboost_system -lboost_thread -lpthread)
+target_link_libraries(${PROJECT_NAME} -lpthread)
