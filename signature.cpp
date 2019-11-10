@@ -41,26 +41,40 @@ void Signature::join()
 
     isWriterStart_ = false;
     cv_write_available_.notify_all();
+
     if(writerThread_.joinable())
         writerThread_.join();
+    if(ep) {
+        rethrow_exception (ep);
+    }
 }
 
 void Signature::appendData(SignatureData data)
 {
-    in_data_queue_.push(move(data));
-    cv_data_available_.notify_one();
+    if(!ep) {
+        in_data_queue_.push(move(data));
+        cv_data_available_.notify_one();
+    } else {
+        exception_ptr tmp_ep = ep;
+        ep = nullptr;
+        rethrow_exception (tmp_ep);
+    }
 }
 
 void Signature::workerLoop(int thread_id)
 {
-    while(isStart_ || in_data_queue_.size() > 0) {
-        while(SignatureData data = in_data_queue_.take()) {
-            calcHash(move(data));
+    try {
+        while(isStart_ || in_data_queue_.size() > 0) {
+            while(SignatureData data = in_data_queue_.take()) {
+                calcHash(move(data));
+            }
+            if(isStart_) {
+                unique_lock<mutex> lock(cv_data_available_mutex_);
+                cv_data_available_.wait_for(lock, std::chrono::milliseconds(100));
+            }
         }
-        if(isStart_) {
-            unique_lock<mutex> lock(cv_data_available_mutex_);
-            cv_data_available_.wait_for(lock, std::chrono::milliseconds(100));
-        }
+    } catch (...) {
+        throwException();
     }
 }
 
@@ -81,22 +95,39 @@ void Signature::calcHash(SignatureData data)
 
 void Signature::writeData()
 {
-    int64_t blocksReady = 0;
-    ofstream out;
-    out.open(out_filename_, ios::out | ios::trunc);
-
-    while(isWriterStart_ || out_data_queue_.size() > 0) {
-        while(SignatureData data = out_data_queue_.take()) {
-            out.seekp(data->get_block_num() * (data->get_data_size()), ios::beg);
-            out.write(data->get_data(), data->get_data_size());
-            blocksReady++;
-            printf("Block %ld complete (%ld/%ld blocks ready)\n", data->get_block_num() + 1,
-                   blocksReady, blocksCount_);
+    try
+    {
+        int64_t blocksReady = 0;
+        ofstream out;
+        out.open(out_filename_, ios::out | ios::trunc);
+        if (!out) {
+            throw runtime_error("Can't open output file");
         }
 
-        if(isWriterStart_) {
-            unique_lock<mutex> lock(cv_write_available_mutex_);
-            cv_write_available_.wait_for(lock, std::chrono::milliseconds(100));
+        while(isWriterStart_ || out_data_queue_.size() > 0) {
+            while(SignatureData data = out_data_queue_.take()) {
+                out.seekp(data->get_block_num() * (data->get_data_size()), ios::beg);
+                out.write(data->get_data(), data->get_data_size());
+                blocksReady++;
+                printf("Block %ld complete (%ld/%ld blocks ready)\n", data->get_block_num() + 1,
+                       blocksReady, blocksCount_);
+            }
+
+            if(isWriterStart_) {
+                unique_lock<mutex> lock(cv_write_available_mutex_);
+                cv_write_available_.wait_for(lock, std::chrono::milliseconds(100));
+            }
         }
+    } catch (...) {
+        throwException();
     }
+}
+
+void Signature::throwException()
+{
+    ep = current_exception();
+    in_data_queue_.erase();
+    out_data_queue_.erase();
+    isStart_ = false;
+    isWriterStart_ = false;
 }

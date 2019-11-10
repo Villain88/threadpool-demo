@@ -13,14 +13,11 @@ int Reader::startReader(const string &outname)
 {
     in.open(filename_, ios::in | ios::binary);
     if (!in) {
-        cout << "Cannot open file.\n" << endl;
-        return 1;
+        throw runtime_error("Can't open input file");
     }
     struct stat st;
     if(stat(filename_.c_str(), &st) < 0) {
-        cerr << "stat failed, fname = "
-             << filename_ << ", " << strerror(errno) << endl;
-        return 1;
+        throw runtime_error("stat failed");
     }
 
     last_section_size_ = block_size_;
@@ -36,13 +33,17 @@ int Reader::startReader(const string &outname)
     cout << "Blocks count: " << blocks_count_ << endl;
 
     Signature signature(outname, blocks_count_);
-    for(int64_t i = 0; i < blocks_count_; i++) {
-        SignatureData data(new block_data(block_size_, i));
-        readBlock(data->get_data(), data->get_block_num());
-        signature.appendData(move(data));
+    try {
+        for(int64_t i = 0; i < blocks_count_; i++) {
+            SignatureData data(new block_data(block_size_, i));
+            readBlock(data->get_data(), data->get_block_num());
+            signature.appendData(move(data));
+        }
+    } catch (...) {
+        signature.join();
+        rethrow_exception(current_exception());
     }
     signature.join();
-    in.close();
 }
 
 bool Reader::readBlock(char *buffer, int64_t block_num)

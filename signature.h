@@ -2,6 +2,7 @@
 #include <thread>
 #include <memory>
 #include "blockdata.h"
+#include <exception>
 
 using namespace std;
 
@@ -28,7 +29,9 @@ private:
     void workerLoop(int thread_id);
     void calcHash(SignatureData data);
     void writeData();
+    void throwException();
     const string out_filename_;
     const int64_t blocksCount_;
+    exception_ptr ep = nullptr;
 };
 

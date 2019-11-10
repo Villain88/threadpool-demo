@@ -58,7 +58,7 @@ SignatureData DataQueue::take()
     if(dataqueue_.size() > 0) {
         data = move(dataqueue_.front());
         dataqueue_.pop();
-        cv_item_pop_.notify_one();
+        cv_item_pop_.notify_all();
     }
     return data;
 }
@@ -69,7 +69,7 @@ void DataQueue::erase()
     while (!dataqueue_.empty()) {
         dataqueue_.pop();
     }
-    cv_item_pop_.notify_one();
+    cv_item_pop_.notify_all();
 }
 
 size_t DataQueue::size()
