@@ -10,7 +10,7 @@ int main(int argc, char *argv[])
     try
     {
         if(argc < 3) {
-            cerr << "Invalid number of arguments" << endl;
+            throw runtime_error("Invalid number of arguments");
             return 1;
         }
         int64_t block_size = 1024*1024;
