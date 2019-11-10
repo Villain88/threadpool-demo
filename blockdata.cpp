@@ -1,4 +1,5 @@
 #include "blockdata.h"
+#include <chrono>
 
 block_data::block_data(int64_t data_size, int64_t block_num)
 {
@@ -39,12 +40,13 @@ void DataQueue::setMaxSize(int max_size)
 
 void DataQueue::push(SignatureData data)
 {
-    /*if(max_size_ > -1) {
+    //Too manu items in queue
+    if(max_size_ > -1) {
         while(dataqueue_.size() > max_size_) {
             std::unique_lock<std::mutex> lock(cv_item_pop_mutex_);
-            cv_item_pop_.wait(lock);
+            cv_item_pop_.wait_for(lock, std::chrono::milliseconds(100));
         }
-    }*/
+    }
     unique_lock<std::mutex> lock(queue_mutex_);
     dataqueue_.push(move(data));
 }

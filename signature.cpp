@@ -59,7 +59,7 @@ void Signature::workerLoop(int thread_id)
         }
         if(isStart_) {
             unique_lock<mutex> lock(cv_data_available_mutex_);
-            cv_data_available_.wait_for(lock, std::chrono::seconds(1));
+            cv_data_available_.wait_for(lock, std::chrono::milliseconds(100));
         }
     }
 }
@@ -96,7 +96,7 @@ void Signature::writeData()
 
         if(isWriterStart_) {
             unique_lock<mutex> lock(cv_write_available_mutex_);
-            cv_write_available_.wait_for(lock, std::chrono::seconds(1));
+            cv_write_available_.wait_for(lock, std::chrono::milliseconds(100));
         }
     }
 }
