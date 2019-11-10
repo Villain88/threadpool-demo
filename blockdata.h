@@ -36,5 +36,5 @@ private:
     mutex queue_mutex_;
     condition_variable cv_item_pop_;
     mutex cv_item_pop_mutex_;
-    int max_size_ = 0;
+    int max_size_ = -1;
 };
