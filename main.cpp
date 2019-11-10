@@ -1,14 +1,19 @@
 #include "reader.h"
+#include <iostream>
+#include <string>
 
 using namespace std;
 
-int main()
+int main(int argc, char *argv[])
 {
-    const char* inname = "/home/petr/tmp_file_big";
-    const char* outname = "/home/petr/tmp_file_md5";
-    int64_t block_size = 1024*1024;
-    Reader reader(inname, block_size);
-    reader.startReader(outname);
+    if(argc != 4) {
+        cerr << "Invalid number of arguments" << endl;
+        return 1;
+    }
+
+    int64_t block_size = stoi(argv[3]);
+    Reader reader(argv[1], block_size);
+    reader.startReader(argv[2]);
 
     return 0;
 }
