@@ -9,7 +9,7 @@ block_data::block_data(int64_t data_size, int64_t block_num)
 
 block_data::~block_data()
 {
-    //cout << "block data destructor" << endl;
+
 }
 
 char *block_data::get_data()
@@ -37,24 +37,24 @@ void DataQueue::setMaxSize(int max_size)
     max_size_ = max_size;
 }
 
-void DataQueue::push(unique_ptr<block_data> data)
+void DataQueue::push(SignatureData data)
 {
-    if(max_size_ > -1) {
+    /*if(max_size_ > -1) {
         while(dataqueue_.size() > max_size_) {
             std::unique_lock<std::mutex> lock(cv_item_pop_mutex_);
             cv_item_pop_.wait(lock);
         }
-    }
-    unique_lock<std::mutex> lock(mutex);
+    }*/
+    unique_lock<std::mutex> lock(queue_mutex_);
     dataqueue_.push(move(data));
 }
 
-unique_ptr<block_data> DataQueue::take()
+SignatureData DataQueue::take()
 {
-    lock_guard<std::mutex> lock(mutex);
-    unique_ptr<block_data> data(nullptr);
+    lock_guard<std::mutex> lock(queue_mutex_);
+    SignatureData data(nullptr);
     if(dataqueue_.size() > 0) {
-        data = std::move(dataqueue_.front());
+        data = move(dataqueue_.front());
         dataqueue_.pop();
         cv_item_pop_.notify_one();
     }
@@ -63,9 +63,15 @@ unique_ptr<block_data> DataQueue::take()
 
 void DataQueue::erase()
 {
-    lock_guard<std::mutex> lock(mutex);
+    lock_guard<std::mutex> lock(queue_mutex_);
     while (!dataqueue_.empty()) {
         dataqueue_.pop();
     }
     cv_item_pop_.notify_one();
+}
+
+size_t DataQueue::size()
+{
+    lock_guard<std::mutex> lock(queue_mutex_);
+    return dataqueue_.size();
 }

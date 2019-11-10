@@ -37,7 +37,7 @@ int Reader::startReader(const string &outname)
 
     Signature signature(outname, blocks_count_);
     for(int64_t i = 0; i < blocks_count_; i++) {
-        unique_ptr<block_data> data(new block_data(block_size_, i));
+        SignatureData data(new block_data(block_size_, i));
         readBlock(data->get_data(), data->get_block_num());
         signature.appendData(move(data));
     }

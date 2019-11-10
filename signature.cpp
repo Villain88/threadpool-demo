@@ -5,6 +5,7 @@
 #include <cstring>
 #include <fstream>
 #include <iostream>
+#include <chrono>
 
 Signature::Signature(const string &out_filename, int64_t blocks_count,
                      int64_t thread_count):out_filename_(out_filename), blocksCount_(blocks_count)
@@ -44,7 +45,7 @@ void Signature::join()
         writerThread_.join();
 }
 
-void Signature::appendData(unique_ptr<block_data> data)
+void Signature::appendData(SignatureData data)
 {
     in_data_queue_.push(move(data));
     cv_data_available_.notify_one();
@@ -52,21 +53,18 @@ void Signature::appendData(unique_ptr<block_data> data)
 
 void Signature::workerLoop(int thread_id)
 {
-    while(1) {
+    while(isStart_ || in_data_queue_.size() > 0) {
+        while(SignatureData data = in_data_queue_.take()) {
+            calcHash(move(data));
+        }
         if(isStart_) {
             unique_lock<mutex> lock(cv_data_available_mutex_);
-            cv_data_available_.wait(lock);
-        } else {
-            break;
-        }
-
-        while(unique_ptr<block_data> data = in_data_queue_.take()) {
-            calcHash(move(data));
+            cv_data_available_.wait_for(lock, std::chrono::seconds(1));
         }
     }
 }
 
-void Signature::calcHash(unique_ptr<block_data> data)
+void Signature::calcHash(SignatureData data)
 {
     uint8_t result[digets_size_];
     md5(reinterpret_cast<uint8_t*>(data->get_data()), data->get_data_size(), result);
@@ -74,10 +72,9 @@ void Signature::calcHash(unique_ptr<block_data> data)
     for (int i = 0; i < digets_size_; i++)
         stringStream << setfill('0') << setw(2) << hex  << static_cast<unsigned int>(result[i]);
     string md5sum = stringStream.str();
-    unique_ptr<block_data> write_data(new block_data(md5sum.length(), data->get_block_num()));
+    SignatureData write_data(new block_data(md5sum.length(), data->get_block_num()));
     memcpy(write_data->get_data(), md5sum.c_str(), write_data->get_data_size());
-    blocksReady_++;
-    cout << "hash " << write_data->get_block_num() + 1 << " ready " << blocksReady_ << "/" << blocksCount_ << endl;
+
     out_data_queue_.push(move(write_data));
     cv_write_available_.notify_one();
 }
@@ -88,20 +85,18 @@ void Signature::writeData()
     ofstream out;
     out.open(out_filename_, ios::out | ios::trunc);
 
-    while(1) {
-        if(isWriterStart_) {
-            unique_lock<mutex> lock(cv_write_available_mutex_);
-            cv_write_available_.wait(lock);
-        } else {
-            break;
-        }
-
-        while(unique_ptr<block_data> data = out_data_queue_.take()) {
+    while(isWriterStart_ || out_data_queue_.size() > 0) {
+        while(SignatureData data = out_data_queue_.take()) {
             out.seekp(data->get_block_num() * (data->get_data_size()), ios::beg);
             out.write(data->get_data(), data->get_data_size());
             blocksReady++;
             printf("Block %ld complete (%ld/%ld blocks ready)\n", data->get_block_num() + 1,
                    blocksReady, blocksCount_);
+        }
+
+        if(isWriterStart_) {
+            unique_lock<mutex> lock(cv_write_available_mutex_);
+            cv_write_available_.wait_for(lock, std::chrono::seconds(1));
         }
     }
 }

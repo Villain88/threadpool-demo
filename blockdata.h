@@ -19,20 +19,21 @@ private:
     int64_t data_size_;
     int64_t block_num_;
 };
-
+using SignatureData = unique_ptr<block_data>;
 
 class DataQueue
 {
 public:
     DataQueue(int max_size = 0);
     void setMaxSize(int max_size);
-    void push(unique_ptr<block_data> data);
-    unique_ptr<block_data> take();
+    void push(SignatureData data);
+    SignatureData take();
     void erase();
+    size_t size();
 
 private:
-    queue<unique_ptr<block_data>> dataqueue_;
-    mutex mutex_;
+    queue<SignatureData> dataqueue_;
+    mutex queue_mutex_;
     condition_variable cv_item_pop_;
     mutex cv_item_pop_mutex_;
     int max_size_ = 0;
