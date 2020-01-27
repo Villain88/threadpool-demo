@@ -7,4 +7,4 @@ cmake .
 make
 ```
 Run app:
-./signature <input-file> <output-file> <block-size(optional)>
+./signature [input-file] [output-file] [block-size(optional)]
